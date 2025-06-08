@@ -16,6 +16,19 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false
 }));
+
+// Middleware para capturar raw body
+app.use('/camera-webhook', (req, res, next) => {
+  let data = '';
+  req.on('data', chunk => {
+    data += chunk;
+  });
+  req.on('end', () => {
+    req.rawBody = data;
+    next();
+  });
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -93,15 +106,33 @@ app.post('/camera-webhook', upload.any(), async (req, res) => {
     console.log('Headers:', req.headers);
     console.log('Body:', req.body);
     console.log('Files:', req.files);
+    console.log('Raw body:', req.rawBody);
     
-    // Extrair event_log do body
-    const eventLog = req.body.event_log;
+    // Extrair event_log do body (pode vir de diferentes formas)
+    let eventLog = req.body.event_log || req.body['event_log'];
+    
+    // Se não encontrou no body, pode ser que esteja no próprio body como JSON
+    if (!eventLog && Object.keys(req.body).length === 0) {
+      // Tentar parsear o body inteiro como JSON
+      try {
+        eventLog = JSON.stringify(req.body);
+      } catch (e) {
+        console.log('Não foi possível parsear body como JSON');
+      }
+    }
+    
+    // Se ainda não encontrou, verificar se há arquivos (multipart pode vir como file)
+    if (!eventLog && req.files && req.files.length > 0) {
+      eventLog = req.files[0].buffer?.toString();
+    }
     
     if (!eventLog) {
       console.log('❌ event_log não encontrado no request');
       return res.status(400).json({ 
         error: 'event_log não encontrado',
-        receivedBody: req.body 
+        receivedBody: req.body,
+        receivedFiles: req.files ? req.files.length : 0,
+        headers: req.headers
       });
     }
     
@@ -140,7 +171,48 @@ app.post('/camera-webhook', upload.any(), async (req, res) => {
   }
 });
 
-// Endpoint de teste
+// Endpoint de teste simples para JSON
+app.post('/test-json', async (req, res) => {
+  try {
+    console.log('🧪 Teste JSON recebido:');
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+    
+    // Simular dados de câmera para teste
+    const dadosTeste = {
+      timestamp: new Date().toISOString(),
+      test: true,
+      message: 'Teste JSON direto',
+      receivedData: req.body
+    };
+    
+    // Processar como se fosse da câmera
+    const dadosProcessados = processarDadosCamera(req.body);
+    
+    if (dadosProcessados) {
+      // Enviar para o Bubble
+      const resultadoBubble = await enviarParaBubble(dadosProcessados);
+      
+      res.json({
+        message: 'Teste JSON processado com sucesso',
+        processedData: dadosProcessados,
+        bubbleResult: resultadoBubble
+      });
+    } else {
+      res.json({
+        message: 'Teste JSON recebido (dados não processados)',
+        receivedData: req.body
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Erro no teste JSON:', error);
+    res.status(500).json({ 
+      error: 'Erro no teste JSON',
+      details: error.message 
+    });
+  }
+});
 app.get('/test', (req, res) => {
   res.json({ 
     message: 'Servidor funcionando!',
