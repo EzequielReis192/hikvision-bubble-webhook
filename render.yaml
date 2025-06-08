@@ -1,12 +1,15 @@
 services:
   - type: web
-    name: hikvision-webhook-processor
+    name: camera-bubble-server
     env: node
-    plan: free
     buildCommand: npm install
     startCommand: npm start
+    plan: free
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3000
       - key: BUBBLE_WEBHOOK_URL
-        sync: false # Você deve configurar esta variável no painel do Render
+        value: https://sua-app.bubbleapps.io/api/1.1/wf/webhook-camera
+    healthCheckPath: /health
