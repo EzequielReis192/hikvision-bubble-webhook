@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: hikvision-webhook-processor
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BUBBLE_WEBHOOK_URL
+        sync: false # Você deve configurar esta variável no painel do Render
