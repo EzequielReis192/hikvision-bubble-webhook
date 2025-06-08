@@ -10,7 +10,12 @@ const port = process.env.PORT || 3000;
 const upload = multer();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Permite todas as origens para teste
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
