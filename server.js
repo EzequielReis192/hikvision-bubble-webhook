@@ -15,43 +15,35 @@ app.use((req, res, next) => {
     next();
 });
 
-// Endpoint para receber dados da câmera Hikvision
-// A câmera enviará para este endpoint exatamente como configurado no HTTP Listening
+// Endpoint para receber dados da câmera Hikvision (VERSÃO ATUALIZADA)
 app.post('*', upload.none(), async (req, res) => {
     try {
-        console.log('=== DADOS RECEBIDOS DA CÂMERA HIKVISION ===');
-        console.log('URL acessada:', req.path);
+        console.log('=== DADOS RECEBIDOS (RAW) ===');
         console.log('Headers:', req.headers);
-        console.log('Body (form data):', req.body);
-        console.log('============================================');
-        
-        // Extrair o event_log que contém os dados JSON da câmera
+        console.log('Body completo (raw):', req.body); // Log detalhado do body bruto
+
+        // Extrair e validar o event_log
         const eventLogString = req.body.event_log;
-        
         if (!eventLogString) {
-            console.log('❌ event_log não encontrado no body:', req.body);
-            return res.status(400).json({ error: 'event_log não encontrado' });
+            console.error('❌ Campo "event_log" não encontrado no body:', req.body);
+            return res.status(400).json({ error: 'Campo "event_log" ausente' });
         }
 
-        console.log('📝 Event log string:', eventLogString);
-
+        console.log('📝 Conteúdo de event_log:', eventLogString);
+        
         // Parse do JSON
         const eventData = JSON.parse(eventLogString);
-        
-        // Processar e estruturar dados para o Bubble
+        console.log('✅ JSON parseado:', eventData);
+
+        // Processar dados para o Bubble (mantive sua lógica original)
         const processedData = {
-            // Informações básicas do evento
             timestamp: eventData.dateTime,
             ip_address: eventData.ipAddress,
             mac_address: eventData.macAddress,
             device_name: eventData.AccessControllerEvent?.deviceName || 'unknown',
-            
-            // Informações do evento de acesso
             event_type: eventData.eventType,
             event_state: eventData.eventState,
             event_description: eventData.eventDescription,
-            
-            // Dados específicos do controle de acesso
             major_event_type: eventData.AccessControllerEvent?.majorEventType,
             sub_event_type: eventData.AccessControllerEvent?.subEventType,
             verify_no: eventData.AccessControllerEvent?.verifyNo,
@@ -59,59 +51,48 @@ app.post('*', upload.none(), async (req, res) => {
             verify_mode: eventData.AccessControllerEvent?.currentVerifyMode,
             attendance_status: eventData.AccessControllerEvent?.attendanceStatus,
             mask_status: eventData.AccessControllerEvent?.mask,
-            
-            // Timestamp de processamento
             processed_at: new Date().toISOString(),
-            
-            // Status para controle no Bubble
             status: 'pending_processing'
         };
 
         console.log('✅ Dados processados para Bubble:', JSON.stringify(processedData, null, 2));
 
-        console.log('🚀 Enviando para Bubble:', BUBBLE_WEBHOOK_URL);
+        // Responder à câmera PRIMEIRO (evita timeout)
+        res.status(200).json({ 
+            success: true, 
+            message: 'Dados recebidos com sucesso',
+            received_at: new Date().toISOString() 
+        });
 
-        // Enviar para Bubble
+        // Enviar para Bubble (AGORA ASSÍNCRONO, após responder à câmera)
+        console.log('🚀 Enviando para Bubble:', BUBBLE_WEBHOOK_URL);
         const bubbleResponse = await axios.post(BUBBLE_WEBHOOK_URL, processedData, {
             headers: {
                 'Content-Type': 'application/json'
             },
-            timeout: 10000 // 10 segundos de timeout
+            timeout: 10000
         });
-
         console.log('✅ Sucesso no Bubble - Status:', bubbleResponse.status);
 
-        // Responder à câmera Hikvision (formato que ela espera)
-        res.status(200).json({ 
-            success: true, 
-            message: 'Event processed successfully',
-            processed_at: new Date().toISOString(),
-            event_id: eventData.AccessControllerEvent?.serialNo || 'unknown'
-        });
-
     } catch (error) {
-        console.error('❌ ERRO ao processar webhook da Hikvision:', error.message);
-        
-        // Log detalhado do erro
+        console.error('❌ ERRO GRAVE:', error.message);
         if (error.response) {
-            console.error('❌ Erro na resposta do Bubble:', {
+            console.error('❌ Erro no Bubble:', {
                 status: error.response.status,
-                data: error.response.data,
-                headers: error.response.headers
+                data: error.response.data
             });
         }
         
-        // Responder à câmera mesmo com erro (para ela não ficar reenviando)
+        // Sempre responda à câmera (evita reenvios)
         res.status(200).json({ 
             success: false,
-            error: 'Internal processing error',
-            message: 'Event received but processing failed',
+            error: error.message,
             timestamp: new Date().toISOString()
         });
     }
 });
 
-// Endpoint de health check
+// Endpoint de health check (mantido original)
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
@@ -120,7 +101,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Endpoint para testar a conexão com Bubble
+// Endpoint para testar a conexão com Bubble (mantido original)
 app.post('/test-bubble', async (req, res) => {
     try {
         const testData = {
@@ -128,7 +109,6 @@ app.post('/test-bubble', async (req, res) => {
             timestamp: new Date().toISOString(),
             message: 'Teste de conexão'
         };
-
         const response = await axios.post(BUBBLE_WEBHOOK_URL, testData);
         res.json({ success: true, bubble_response: response.status });
     } catch (error) {
@@ -137,18 +117,16 @@ app.post('/test-bubble', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
     console.log(`Webhook endpoint: Aceita qualquer URL POST`);
     console.log(`Health check: http://localhost:${PORT}/health`);
 });
 
-// Tratamento de erros não capturados
+// Tratamento de erros não capturados (mantido original)
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
-
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
     process.exit(1);
